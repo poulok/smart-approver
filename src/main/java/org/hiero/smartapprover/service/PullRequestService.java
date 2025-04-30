@@ -108,8 +108,12 @@ public class PullRequestService {
             String reason = (String) details.get("reason");
 
             try {
-                GHPullRequestReview review = pullRequest.getReview(reviewId);
-                review.dismiss(reason);
+                for (final GHPullRequestReview review : pullRequest.listReviews()) {
+                    if (review.getId() == reviewId) {
+                        review.dismiss(reason);
+                        break;
+                    }
+                }
 
                 log.info("Dismissed review ID {} from {}", reviewId, username);
             } catch (IOException e) {
@@ -145,8 +149,8 @@ public class PullRequestService {
         commentBody.append("## Smart Approval Bot Update\n\n");
         commentBody.append("Files were modified that affected the following code owners:\n\n");
 
-        for (String owner : affectedOwners) {
-            commentBody.append("- @").append(owner).append("\n");
+        for (String affectedOwner : affectedOwners) {
+            commentBody.append("- @").append(affectedOwner).append("\n");
         }
 
         commentBody.append("\nTheir approvals have been dismissed because their files were modified:\n\n");
