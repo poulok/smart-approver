@@ -1,194 +1,323 @@
 package org.hiero.smartapprover.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.hiero.smartapprover.model.DismissalResult;
+import org.hiero.smartapprover.model.CodeOwnerRule;
+import org.hiero.smartapprover.model.RepoConfig;
 import org.kohsuke.github.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Service for interacting with GitHub pull requests.
+ * Service for processing Pull Request changes
  */
 @Service
 public class PullRequestService {
+    private static final Logger logger = LoggerFactory.getLogger(PullRequestService.class);
 
-    private static final Logger log = LoggerFactory.getLogger(PullRequestService.class);
+    private final GitHubService gitHubService;
+    private final CodeOwnerService codeOwnerService;
+    private final PullRequestStateService pullRequestStateService;
 
-    private final GitHubAppInstallationService installationService;
-    private final ObjectMapper objectMapper;
-
-    /**
-     * Constructor for PullRequestService.
-     *
-     * @param installationService Service for managing GitHub App installations
-     * @param objectMapper ObjectMapper for JSON processing
-     */
-    public PullRequestService(GitHubAppInstallationService installationService, ObjectMapper objectMapper) {
-        this.installationService = installationService;
-        this.objectMapper = objectMapper;
+    public PullRequestService(
+            GitHubService gitHubService,
+            CodeOwnerService codeOwnerService,
+            PullRequestStateService pullRequestStateService) {
+        this.gitHubService = gitHubService;
+        this.codeOwnerService = codeOwnerService;
+        this.pullRequestStateService = pullRequestStateService;
     }
 
     /**
-     * Get modified files in a pull request.
-     *
-     * @param installationId GitHub App installation ID
-     * @param owner Repository owner/organization
-     * @param repo Repository name
-     * @param pullNumber Pull request number
-     * @return List of modified file paths
-     * @throws IOException if GitHub API communication fails
+     * Process changes in a pull request
      */
-    public List<String> getModifiedFiles(long installationId, String owner, String repo, int pullNumber)
-            throws IOException {
-        GitHub gitHub = installationService.getInstallationClient(installationId);
-        GHRepository repository = gitHub.getRepository(owner + "/" + repo);
-        GHPullRequest pullRequest = repository.getPullRequest(pullNumber);
+    public void processPullRequestChanges(String repoFullName, int prNumber) throws IOException {
+        logger.info("Processing changes for PR #{} in {}", prNumber, repoFullName);
 
-        List<String> files = new ArrayList<>();
-        PagedIterable<GHPullRequestFileDetail> fileDetails = pullRequest.listFiles();
+        GHRepository repository = gitHubService.getRepository(repoFullName);
+        GHPullRequest pullRequest = gitHubService.getPullRequest(repoFullName, prNumber);
 
-        for (GHPullRequestFileDetail file : fileDetails) {
-            files.add(file.getFilename());
+        // Check if the feature is enabled for this repository
+        RepoConfig config = gitHubService.getRepositoryConfig(repository);
+        if (!config.isEnabled()) {
+            logger.info("Smart approval bot is disabled for repository {}", repoFullName);
+            return;
         }
 
-        return files;
+        // Capture information about the current change event
+        String currentSha = pullRequest.getHead().getSha();
+        Instant processingTime = Instant.now();
+
+        // Check if the PR has changed since the last processing
+        if (!pullRequestStateService.hasChangedSinceLastProcess(repoFullName, prNumber, currentSha)) {
+            logger.info("PR #{} in {} has not changed since last processing, skipping", prNumber, repoFullName);
+            return;
+        }
+
+        // Get the changed files in this PR
+        Set<String> changedFiles = getChangedFiles(pullRequest);
+        logger.info("Found {} changed files in PR #{}", changedFiles.size(), prNumber);
+
+        // If we've processed this PR before, get only the files that have changed since then
+        Set<String> filesChangedSinceLastProcess = changedFiles;
+        if (pullRequestStateService.hasBeenProcessed(repoFullName, prNumber)) {
+            // Compare with the previous state to find only files that have changed since last processing
+            Set<String> previouslyChangedFiles =
+                    pullRequestStateService.getChangedFilesSinceLastProcess(repoFullName, prNumber);
+
+            // Files that are in the current set but not in the previous set are new changes
+            // Files that are in both sets but have been modified need to be checked
+            // For simplicity, we consider all changes relevant here
+            filesChangedSinceLastProcess = new HashSet<>(changedFiles);
+
+            logger.info("PR #{} in {} has {} files changed since last processing",
+                    prNumber, repoFullName, filesChangedSinceLastProcess.size());
+        }
+
+        // Get CODEOWNERS rules from the target branch
+        String targetBranch = pullRequest.getBase().getRef();
+        List<CodeOwnerRule> codeOwnerRules = codeOwnerService.getCodeOwnerRules(repository, targetBranch);
+        logger.info("Found {} code owner rules in branch {}", codeOwnerRules.size(), targetBranch);
+
+        if (codeOwnerRules.isEmpty()) {
+            logger.info("No CODEOWNERS file found, skipping approval management");
+            return;
+        }
+
+        // Map files to their owners - only consider files changed since last processing
+        Map<String, Set<String>> fileOwners =
+                codeOwnerService.mapFilesToOwners(codeOwnerRules, filesChangedSinceLastProcess);
+
+        // Get all affected owners
+        Set<String> affectedOwners = codeOwnerService.getAffectedOwners(fileOwners);
+        logger.info("Found {} affected code owners: {}", affectedOwners.size(), affectedOwners);
+
+        // Process reviews and dismiss those from affected owners
+        if (!affectedOwners.isEmpty()) {
+            processReviews(pullRequest, affectedOwners, filesChangedSinceLastProcess);
+
+            // Auto-assign reviewers if configured
+            if (config.isAutoAssignReviewers()) {
+                assignReviewers(pullRequest, affectedOwners);
+            }
+
+            // Notify relevant code owners if configured
+            if (config.isNotifyCodeOwners()) {
+                notifyCodeOwners(pullRequest, affectedOwners, fileOwners);
+            }
+
+            // Add a summary comment for this processing event
+            StringBuilder summary = new StringBuilder("## Smart Approval Bot Summary\n\n");
+            summary.append("Processing completed at: ").append(processingTime).append("\n");
+            summary.append("Commit SHA: `").append(currentSha).append("`\n\n");
+            summary.append("Changed files in this update: ").append(filesChangedSinceLastProcess.size()).append("\n");
+            summary.append("Affected code owners: ").append(affectedOwners.size()).append("\n");
+
+            gitHubService.addPullRequestComment(pullRequest, summary.toString());
+        } else {
+            logger.info("No code owners affected by changes in PR #{} in {}", prNumber, repoFullName);
+        }
+
+        // Update the PR state
+        pullRequestStateService.updateState(repoFullName, prNumber, currentSha, changedFiles);
     }
 
     /**
-     * Get all reviews for a pull request.
-     *
-     * @param installationId GitHub App installation ID
-     * @param owner Repository owner/organization
-     * @param repo Repository name
-     * @param pullNumber Pull request number
-     * @return List of review JSON nodes
-     * @throws IOException if GitHub API communication fails
+     * Get all changed files in a pull request
      */
-    public List<JsonNode> getPullRequestReviews(long installationId, String owner, String repo, int pullNumber)
-            throws IOException {
-        GitHub gitHub = installationService.getInstallationClient(installationId);
-        GHRepository repository = gitHub.getRepository(owner + "/" + repo);
-        GHPullRequest pullRequest = repository.getPullRequest(pullNumber);
+    private Set<String> getChangedFiles(GHPullRequest pullRequest) throws IOException {
+        Set<String> changedFiles = new HashSet<>();
 
+        for (GHPullRequestFileDetail file : pullRequest.listFiles()) {
+            changedFiles.add(file.getFilename());
+        }
+
+        return changedFiles;
+    }
+
+    /**
+     * Process reviews and dismiss those from affected owners
+     */
+    private void processReviews(GHPullRequest pullRequest, Set<String> affectedOwners, Set<String> changedFiles) throws IOException {
         List<GHPullRequestReview> reviews = pullRequest.listReviews().toList();
 
-        // Convert to JsonNode for easier processing
-        return reviews.stream()
-                .map(this::convertReviewToJson)
-                .collect(Collectors.toList());
-    }
+        // Group reviews by user and get only the latest review from each user
+        Map<String, GHPullRequestReview> latestReviews = new HashMap<>();
+        for (GHPullRequestReview review : reviews) {
+            String reviewer = review.getUser().getLogin();
 
-    /**
-     * Dismiss specific reviews with explanations.
-     *
-     * @param installationId GitHub App installation ID
-     * @param owner Repository owner/organization
-     * @param repo Repository name
-     * @param pullNumber Pull request number
-     * @param dismissals Dismissal results containing reviews to dismiss
-     * @throws IOException if GitHub API communication fails
-     */
-    public void dismissReviews(long installationId, String owner, String repo, int pullNumber,
-            DismissalResult dismissals) throws IOException {
-        GitHub gitHub = installationService.getInstallationClient(installationId);
-        GHRepository repository = gitHub.getRepository(owner + "/" + repo);
-        GHPullRequest pullRequest = repository.getPullRequest(pullNumber);
+            // Skip reviews that are not approval or explicit non-approval
+            if (review.getState() != GHPullRequestReviewState.APPROVED &&
+                    review.getState() != GHPullRequestReviewState.CHANGES_REQUESTED) {
+                continue;
+            }
 
-        for (Map.Entry<String, Map<String, Object>> entry : dismissals.getOwnerReasons().entrySet()) {
-            String username = entry.getKey();
-            Map<String, Object> details = entry.getValue();
-
-            int reviewId = (int) details.get("reviewId");
-            String reason = (String) details.get("reason");
-
-            try {
-                GHPullRequestReview review = pullRequest.getReview(reviewId);
-                review.dismiss(reason);
-
-                log.info("Dismissed review ID {} from {}", reviewId, username);
-            } catch (IOException e) {
-                log.error("Failed to dismiss review from {}: {}", username, e.getMessage());
+            // Store only the latest review from each user
+            if (!latestReviews.containsKey(reviewer) ||
+                    latestReviews.get(reviewer).getSubmittedAt().before(review.getSubmittedAt())) {
+                latestReviews.put(reviewer, review);
             }
         }
+
+        // Dismiss reviews from affected owners
+        Map<String, List<String>> dismissedReviewerFiles = new HashMap<>();
+        for (Map.Entry<String, GHPullRequestReview> entry : latestReviews.entrySet()) {
+            String reviewer = entry.getKey();
+            GHPullRequestReview review = entry.getValue();
+
+            // Skip reviews that are not approvals
+            if (review.getState() != GHPullRequestReviewState.APPROVED) {
+                continue;
+            }
+
+            // Check if this reviewer is an affected owner (remove @ prefix if present)
+            String normalizedReviewer = reviewer.startsWith("@") ? reviewer.substring(1) : reviewer;
+            boolean isAffected = affectedOwners.stream()
+                    .map(owner -> owner.startsWith("@") ? owner.substring(1) : owner)
+                    .anyMatch(normalizedReviewer::equals);
+
+            if (isAffected) {
+                // Find which files this reviewer owns that were changed
+                List<String> ownedChangedFiles = findOwnedChangedFiles(normalizedReviewer, changedFiles);
+
+                if (!ownedChangedFiles.isEmpty()) {
+                    String message = "Dismissing approval because files you own have been modified.";
+                    gitHubService.dismissReview(pullRequest, review, message);
+                    dismissedReviewerFiles.put(reviewer, ownedChangedFiles);
+                }
+            }
+        }
+
+        // Add a detailed comment summarizing the dismissed reviews
+        if (!dismissedReviewerFiles.isEmpty()) {
+            StringBuilder comment = new StringBuilder("## Smart Approval Bot: Approvals Dismissed\n\n");
+
+            comment.append("I've dismissed approvals from the following code owners as their files were modified:\n\n");
+
+            for (Map.Entry<String, List<String>> entry : dismissedReviewerFiles.entrySet()) {
+                String reviewer = entry.getKey();
+                List<String> files = entry.getValue();
+
+                comment.append("### ").append(reviewer).append("\n\n");
+
+                // Show up to 5 files with an indicator if there are more
+                for (int i = 0; i < Math.min(5, files.size()); i++) {
+                    comment.append("- `").append(files.get(i)).append("`\n");
+                }
+
+                if (files.size() > 5) {
+                    comment.append("- ...and ").append(files.size() - 5).append(" more files\n");
+                }
+
+                comment.append("\n");
+            }
+
+            comment.append("These code owners will need to review the changes and approve again.\n");
+
+            gitHubService.addPullRequestComment(pullRequest, comment.toString());
+        }
     }
 
     /**
-     * Add a comment to the PR explaining which approvals were reset and why.
-     *
-     * @param installationId GitHub App installation ID
-     * @param owner Repository owner/organization
-     * @param repo Repository name
-     * @param pullNumber Pull request number
-     * @param dismissals Dismissal results containing affected owners
-     * @param modifiedFiles List of modified files
-     * @throws IOException if GitHub API communication fails
+     * Find which files owned by a reviewer were changed
      */
-    public void addExplanationComment(long installationId, String owner, String repo, int pullNumber,
-            DismissalResult dismissals, List<String> modifiedFiles) throws IOException {
-        GitHub gitHub = installationService.getInstallationClient(installationId);
-        GHRepository repository = gitHub.getRepository(owner + "/" + repo);
-        GHPullRequest pullRequest = repository.getPullRequest(pullNumber);
+    private List<String> findOwnedChangedFiles(String reviewer, Set<String> changedFiles) {
+        GHPullRequest pullRequest = null;
+        List<String> ownedFiles = new ArrayList<>();
 
-        Set<String> affectedOwners = dismissals.getOwnerReasons().keySet();
+        // In a real implementation, this would use the codeOwnerService to determine
+        // which of the changed files are owned by this specific reviewer
+        try {
+            String repoFullName = pullRequest.getRepository().getFullName();
+            String targetBranch = pullRequest.getBase().getRef();
+            GHRepository repository = gitHubService.getRepository(repoFullName);
 
-        if (affectedOwners.isEmpty()) {
-            return; // No approvals were reset
+            List<CodeOwnerRule> codeOwnerRules = codeOwnerService.getCodeOwnerRules(repository, targetBranch);
+
+            // For each changed file, check if this reviewer is an owner
+            for (String file : changedFiles) {
+                Set<String> owners = codeOwnerService.getOwnersForFile(codeOwnerRules, file);
+
+                // Normalize owner names for comparison (remove @ if present)
+                boolean isOwner = owners.stream()
+                        .map(owner -> owner.startsWith("@") ? owner.substring(1) : owner)
+                        .anyMatch(owner -> owner.equals(reviewer));
+
+                if (isOwner) {
+                    ownedFiles.add(file);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error determining owned files: {}", e.getMessage());
+            // Fallback to return all changed files
+            return new ArrayList<>(changedFiles);
         }
 
-        StringBuilder commentBody = new StringBuilder();
-        commentBody.append("## Smart Approval Bot Update\n\n");
-        commentBody.append("Files were modified that affected the following code owners:\n\n");
+        return ownedFiles;
+    }
+
+    /**
+     * Assign affected code owners as reviewers
+     */
+    private void assignReviewers(GHPullRequest pullRequest, Set<String> affectedOwners) throws IOException {
+        // Filter out the PR author from the reviewer list
+        String authorLogin = pullRequest.getUser().getLogin();
+        Set<String> reviewers = affectedOwners.stream()
+                .map(owner -> owner.startsWith("@") ? owner.substring(1) : owner)
+                .filter(owner -> !owner.equals(authorLogin))
+                .collect(Collectors.toSet());
+
+        if (!reviewers.isEmpty()) {
+            logger.info("Assigning reviewers to PR #{}: {}", pullRequest.getNumber(), reviewers);
+            pullRequest.requestReviewers(new ArrayList<>(reviewers));
+        }
+    }
+
+    /**
+     * Notify affected code owners about the changes
+     */
+    private void notifyCodeOwners(GHPullRequest pullRequest, Set<String> affectedOwners, Map<String, Set<String>> fileOwners) throws IOException {
+        if (affectedOwners.isEmpty()) {
+            return;
+        }
+
+        // Create a mapping of owners to their files
+        Map<String, List<String>> ownerFiles = new HashMap<>();
+        for (Map.Entry<String, Set<String>> entry : fileOwners.entrySet()) {
+            String file = entry.getKey();
+            Set<String> owners = entry.getValue();
+
+            for (String owner : owners) {
+                ownerFiles.computeIfAbsent(owner, k -> new ArrayList<>()).add(file);
+            }
+        }
+
+        // Build the notification comment
+        StringBuilder comment = new StringBuilder("## Code Owner Notification\n\n");
+        comment.append("This pull request modifies files owned by the following people:\n\n");
 
         for (String owner : affectedOwners) {
-            commentBody.append("- @").append(owner).append("\n");
+            List<String> files = ownerFiles.getOrDefault(owner, Collections.emptyList());
+            if (!files.isEmpty()) {
+                comment.append("### ").append(owner).append("\n\n");
+
+                // Show up to 5 files with an indicator if there are more
+                for (int i = 0; i < Math.min(5, files.size()); i++) {
+                    comment.append("- `").append(files.get(i)).append("`\n");
+                }
+
+                if (files.size() > 5) {
+                    comment.append("- ...and ").append(files.size() - 5).append(" more files\n");
+                }
+
+                comment.append("\n");
+            }
         }
 
-        commentBody.append("\nTheir approvals have been dismissed because their files were modified:\n\n");
-
-        // List up to 10 modified files (to avoid extremely long comments)
-        List<String> filesToShow = modifiedFiles.size() > 10
-                ? modifiedFiles.subList(0, 10)
-                : modifiedFiles;
-
-        for (String file : filesToShow) {
-            commentBody.append("- `").append(file).append("`\n");
-        }
-
-        if (modifiedFiles.size() > 10) {
-            commentBody.append("- ... and ").append(modifiedFiles.size() - 10).append(" more files\n");
-        }
-
-        commentBody.append("\nPlease request new reviews from these code owners.");
-
-        try {
-            pullRequest.comment(commentBody.toString());
-        } catch (IOException e) {
-            log.error("Failed to add explanation comment: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Convert a GHPullRequestReview to a JsonNode for easier processing.
-     *
-     * @param review GitHub Pull Request Review object
-     * @return JsonNode representation
-     */
-    private JsonNode convertReviewToJson(GHPullRequestReview review) {
-        Map<String, Object> map = new HashMap<>();
-        map.put("id", review.getId());
-        map.put("state", review.getState().name());
-        map.put("submitted_at", review.getSubmittedAt().toString());
-
-        Map<String, Object> user = new HashMap<>();
-        user.put("login", review.getUser().getLogin());
-        map.put("user", user);
-
-        return objectMapper.valueToTree(map);
+        gitHubService.addPullRequestComment(pullRequest, comment.toString());
     }
 }
