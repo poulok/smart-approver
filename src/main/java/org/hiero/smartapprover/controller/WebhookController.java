@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Controller for handling GitHub webhook events.
  */
 @RestController
-@RequestMapping("/webhook")
+@RequestMapping("/events")
 public class WebhookController {
 
     private static final Logger log = LoggerFactory.getLogger(WebhookController.class);
