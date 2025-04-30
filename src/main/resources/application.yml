@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: smart-approval-bot
+
+github:
+  app:
+    # GitHub App ID from the GitHub Developer settings
+    appId: ${GITHUB_APP_ID}
+    # Path to the private key file for the GitHub App
+    privateKeyPath: ${GITHUB_PRIVATE_KEY_PATH}
+    # Webhook secret for verifying webhook payloads
+    webhookSecret: ${GITHUB_WEBHOOK_SECRET}
+
+logging:
+  level:
+    com.github.smartapprovalbot: INFO
