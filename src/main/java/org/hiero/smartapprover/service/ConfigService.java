@@ -1,26 +1,36 @@
 package org.hiero.smartapprover.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.hiero.smartapprover.config.AppConfig;
-import org.hiero.smartapprover.model.RepoConfig;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import org.hiero.smartapprover.config.AppConfig;
+import org.hiero.smartapprover.model.RepoConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 /**
  * Service for managing repository-specific configurations.
  */
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class ConfigService {
+
+    private static final Logger log = LoggerFactory.getLogger(ConfigService.class);
 
     private final AppConfig appConfig;
     private final RepositoryService repositoryService;
+
+    /**
+     * Constructor for ConfigService.
+     *
+     * @param appConfig Application configuration
+     * @param repositoryService Service for interacting with GitHub repositories
+     */
+    public ConfigService(AppConfig appConfig, RepositoryService repositoryService) {
+        this.appConfig = appConfig;
+        this.repositoryService = repositoryService;
+    }
 
     /**
      * Gets the configuration for a specific repository.

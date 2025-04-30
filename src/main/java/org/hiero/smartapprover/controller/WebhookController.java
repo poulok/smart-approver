@@ -2,36 +2,49 @@ package org.hiero.smartapprover.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.hiero.smartapprover.service.GitHubEventService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.codec.digest.HmacAlgorithms;
-import org.apache.commons.codec.digest.HmacUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+import javax.servlet.http.HttpServletRequest;
+import org.apache.commons.codec.digest.HmacAlgorithms;
+import org.apache.commons.codec.digest.HmacUtils;
+import org.hiero.smartapprover.service.GitHubEventService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Controller for handling GitHub webhook events.
  */
 @RestController
 @RequestMapping("/webhook")
-@RequiredArgsConstructor
-@Slf4j
 public class WebhookController {
+
+    private static final Logger log = LoggerFactory.getLogger(WebhookController.class);
 
     private final GitHubEventService gitHubEventService;
     private final ObjectMapper objectMapper;
 
     @Value("${github.app.webhook-secret}")
     private String webhookSecret;
+
+    /**
+     * Constructor for WebhookController.
+     *
+     * @param gitHubEventService Service for handling GitHub events
+     * @param objectMapper ObjectMapper for JSON processing
+     */
+    public WebhookController(GitHubEventService gitHubEventService, ObjectMapper objectMapper) {
+        this.gitHubEventService = gitHubEventService;
+        this.objectMapper = objectMapper;
+    }
 
     /**
      * Handles incoming GitHub webhook events.

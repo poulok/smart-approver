@@ -2,13 +2,6 @@ package org.hiero.smartapprover.service;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.kohsuke.github.GitHub;
-import org.kohsuke.github.GitHubBuilder;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.security.interfaces.RSAPrivateKey;
 import java.time.Instant;
@@ -16,13 +9,15 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.kohsuke.github.GitHub;
+import org.kohsuke.github.GitHubBuilder;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 /**
  * Service for managing GitHub App installation tokens.
  */
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class GitHubAppInstallationService {
 
     @Value("${github.app.id}")
@@ -32,6 +27,13 @@ public class GitHubAppInstallationService {
 
     // Cache for installation tokens to avoid too many API calls
     private final Map<Long, InstallationToken> tokenCache = new ConcurrentHashMap<>();
+
+    /**
+     * Constructor for GitHubAppInstallationService.
+     *
+     * @param privateKey RSAPrivateKey for signing JWT tokens
+     */
+    public GitHubAppInstallationService(RSAPrivateKey privateKey) {this.privateKey = privateKey;}
 
     /**
      * Gets a GitHub client authenticated for a specific installation.

@@ -3,9 +3,9 @@ package org.hiero.smartapprover.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.hiero.smartapprover.model.DismissalResult;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.kohsuke.github.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -16,12 +16,23 @@ import java.util.stream.Collectors;
  * Service for interacting with GitHub pull requests.
  */
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class PullRequestService {
+
+    private static final Logger log = LoggerFactory.getLogger(PullRequestService.class);
 
     private final GitHubAppInstallationService installationService;
     private final ObjectMapper objectMapper;
+
+    /**
+     * Constructor for PullRequestService.
+     *
+     * @param installationService Service for managing GitHub App installations
+     * @param objectMapper ObjectMapper for JSON processing
+     */
+    public PullRequestService(GitHubAppInstallationService installationService, ObjectMapper objectMapper) {
+        this.installationService = installationService;
+        this.objectMapper = objectMapper;
+    }
 
     /**
      * Get modified files in a pull request.

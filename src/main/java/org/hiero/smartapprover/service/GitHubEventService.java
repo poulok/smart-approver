@@ -1,29 +1,44 @@
 package org.hiero.smartapprover.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.hiero.smartapprover.model.DismissalResult;
-import org.hiero.smartapprover.model.RepoConfig;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import org.hiero.smartapprover.model.DismissalResult;
+import org.hiero.smartapprover.model.RepoConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
 
 /**
  * Service for handling GitHub webhook events.
  */
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class GitHubEventService {
+
+    private static final Logger log = LoggerFactory.getLogger(GitHubEventService.class);
 
     private final RepositoryService repositoryService;
     private final CodeownersService codeownersService;
     private final PullRequestService pullRequestService;
     private final ConfigService configService;
+
+    /**
+     * Constructor for GitHubEventService.
+     *
+     * @param repositoryService Service for interacting with GitHub repositories
+     * @param codeownersService Service for handling CODEOWNERS files
+     * @param pullRequestService Service for interacting with pull requests
+     * @param configService Service for managing repository configurations
+     */
+    public GitHubEventService(RepositoryService repositoryService, CodeownersService codeownersService,
+            PullRequestService pullRequestService, ConfigService configService) {
+        this.repositoryService = repositoryService;
+        this.codeownersService = codeownersService;
+        this.pullRequestService = pullRequestService;
+        this.configService = configService;
+    }
 
     /**
      * Handles the pull_request.synchronize event (new commits pushed to a PR).

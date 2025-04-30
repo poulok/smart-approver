@@ -2,26 +2,42 @@ package org.hiero.smartapprover.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.hiero.smartapprover.config.AppConfig;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.kohsuke.github.*;
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.util.Base64;
+import org.hiero.smartapprover.config.AppConfig;
+import org.kohsuke.github.GHContent;
+import org.kohsuke.github.GHFileNotFoundException;
+import org.kohsuke.github.GHRepository;
+import org.kohsuke.github.GitHub;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 /**
  * Service for interacting with GitHub repositories.
  */
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class RepositoryService {
+
+    private static final Logger log = LoggerFactory.getLogger(RepositoryService.class);
 
     private final AppConfig appConfig;
     private final ObjectMapper objectMapper;
     private final GitHubAppInstallationService installationService;
+
+    /**
+     * Constructor for RepositoryService.
+     *
+     * @param appConfig Application configuration
+     * @param objectMapper ObjectMapper for JSON processing
+     * @param installationService Service for managing GitHub App installations
+     */
+    public RepositoryService(AppConfig appConfig, ObjectMapper objectMapper,
+            GitHubAppInstallationService installationService) {
+        this.appConfig = appConfig;
+        this.objectMapper = objectMapper;
+        this.installationService = installationService;
+    }
 
     /**
      * Retrieves the content of the CODEOWNERS file from the repository.

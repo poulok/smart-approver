@@ -2,10 +2,11 @@ package org.hiero.smartapprover.config;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GitHubBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,8 +28,9 @@ import java.util.Date;
  * Configuration class for GitHub App authentication and API client setup.
  */
 @Configuration
-@Slf4j
 public class GitHubAppConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(GitHubAppConfig.class);
 
     @Value("${github.app.id}")
     private String appId;

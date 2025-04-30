@@ -1,19 +1,23 @@
 package org.hiero.smartapprover.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.hiero.smartapprover.model.DismissalResult;
-import io.github.azagniotov.matcher.AntPathMatcher;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+import org.hiero.smartapprover.model.DismissalResult;
+import org.springframework.stereotype.Service;
+import org.springframework.util.AntPathMatcher;
 
 /**
  * Service for working with CODEOWNERS files and determining file ownership.
  */
 @Service
-@Slf4j
 public class CodeownersService {
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
@@ -69,7 +73,7 @@ public class CodeownersService {
         for (Map.Entry<String, List<String>> entry : rules.entrySet()) {
             String pattern = entry.getKey();
 
-            if (pathMatcher.isMatch(pattern, filePath)) {
+            if (pathMatcher.match(pattern, filePath)) {
                 // Clear previous matches as per GitHub CODEOWNERS behavior
                 matchingOwners.clear();
 
@@ -160,6 +164,6 @@ public class CodeownersService {
         }
 
         return excludePaths.stream()
-                .anyMatch(pattern -> pathMatcher.isMatch(pattern, filePath));
+                .anyMatch(pattern -> pathMatcher.match(pattern, filePath));
     }
 }
