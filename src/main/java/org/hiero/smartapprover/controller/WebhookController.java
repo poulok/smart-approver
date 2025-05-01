@@ -6,11 +6,11 @@ import org.hiero.smartapprover.service.PullRequestService;
 import org.hiero.smartapprover.service.PullRequestStateService;
 import org.hiero.smartapprover.service.CodeOwnerService;
 import org.apache.commons.codec.digest.HmacUtils;
+import org.kohsuke.github.GitHub;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,24 +29,28 @@ public class WebhookController {
     private final PullRequestStateService pullRequestStateService;
     private final CodeOwnerService codeOwnerService;
     private final String webhookSecret;
+	// TODO: temporary injection
+	private final GitHub gitHubClient;
 
-    public WebhookController(
+	public WebhookController(
             ObjectMapper objectMapper,
             PullRequestService pullRequestService,
             PullRequestStateService pullRequestStateService,
             CodeOwnerService codeOwnerService,
-            String webhookSecret) {
+            String webhookSecret,
+			GitHub gitHubClient) {
         this.objectMapper = objectMapper;
         this.pullRequestService = pullRequestService;
         this.pullRequestStateService = pullRequestStateService;
         this.codeOwnerService = codeOwnerService;
         this.webhookSecret = webhookSecret;
-    }
+		this.gitHubClient = gitHubClient;
+	}
 
     @PostMapping("/events")
     public ResponseEntity<String> handleWebhook(
 			@RequestHeader HttpHeaders headers,
-			@RequestBody String payload) {
+			@RequestBody String payload) throws IOException {
 		String eventType = headers.getFirst("X-GitHub-Event");
 		String signature = headers.getFirst("X-Hub-Signature-256");
 		String deliveryId = headers.getFirst("X-GitHub-Delivery");
