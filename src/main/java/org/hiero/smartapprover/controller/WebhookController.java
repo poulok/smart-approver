@@ -55,6 +55,9 @@ public class WebhookController {
 		String signature = headers.getFirst("X-Hub-Signature-256");
 		String deliveryId = headers.getFirst("X-GitHub-Delivery");
 
+		logger.info("Headers: {}", headers);
+		logger.info("Payload: {}", payload);
+
         logger.info("Received webhook: {} - {}", eventType, deliveryId);
 
         // Verify webhook signature
