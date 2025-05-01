@@ -9,6 +9,7 @@ import org.apache.commons.codec.digest.HmacUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -41,17 +42,19 @@ public class WebhookController {
         this.webhookSecret = webhookSecret;
     }
 
-    @PostMapping
+    @PostMapping("/events")
     public ResponseEntity<String> handleWebhook(
-            @RequestBody String payload,
-            @RequestHeader("X-GitHub-Event") String eventType,
-            @RequestHeader("X-Hub-Signature-256") String signature,
-            @RequestHeader("X-GitHub-Delivery") String deliveryId) {
+			@RequestBody RequestEntity<String> requestEntity) {
+		var headers = requestEntity.getHeaders();
+		String eventType = headers.getFirst("X-GitHub-Event");
+		String signature = headers.getFirst("X-Hub-Signature-256");
+		String deliveryId = headers.getFirst("X-GitHub-Delivery");
 
         logger.info("Received webhook: {} - {}", eventType, deliveryId);
 
         // Verify webhook signature
-        if (!isSignatureValid(payload, signature)) {
+		String payload = requestEntity.getBody();
+		if (!isSignatureValid(payload, signature)) {
             logger.warn("Invalid webhook signature for delivery: {}", deliveryId);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid signature");
         }
@@ -69,7 +72,8 @@ public class WebhookController {
                 case "push":
                     handlePushEvent(eventPayload);
                     break;
-                default:
+				case null:
+				default:
                     logger.debug("Ignoring unhandled event type: {}", eventType);
             }
 
