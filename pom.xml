@@ -26,6 +26,12 @@
     </properties>
 
     <dependencies>
+	    <dependency>
+    <groupId>com.infradna.tool</groupId>
+    <artifactId>bridge-method-injector</artifactId>
+    <version>1.18</version> 
+</dependency>
+
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
