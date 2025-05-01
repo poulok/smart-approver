@@ -30,6 +30,12 @@
     <groupId>com.infradna.tool</groupId>
     <artifactId>bridge-method-injector</artifactId>
     <version>1.18</version> 
+        <exclusions>
+        <exclusion>
+            <groupId>org.jenkins-ci</groupId>
+            <artifactId>annotation-indexer</artifactId>
+        </exclusion>
+    </exclusions>
 </dependency>
 
         <!-- Spring Boot -->
