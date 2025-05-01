@@ -6,6 +6,7 @@ import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GitHubBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.io.IOException;
@@ -38,7 +39,9 @@ public class GitHubConfig {
     }
 
     private RSAPrivateKey loadPrivateKey() throws Exception {
-        String privateKeyContent = new String(Files.readAllBytes(Paths.get(properties.getPrivateKeyPath())));
+		ClassPathResource resource = new ClassPathResource(properties.getPrivateKeyPath());
+		byte[] content = resource.getInputStream().readAllBytes();
+        String privateKeyContent = new String(content);
 
         // Strip out header, footer, and any whitespace
         String privateKeyPEM = privateKeyContent
