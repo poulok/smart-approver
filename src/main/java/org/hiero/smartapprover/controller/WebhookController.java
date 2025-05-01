@@ -54,10 +54,10 @@ public class WebhookController {
         logger.info("Received webhook: {} - {}", eventType, deliveryId);
 
         // Verify webhook signature
-		if (!isSignatureValid(payload, signature)) {
-            logger.warn("Invalid webhook signature for delivery: {}", deliveryId);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid signature");
-        }
+//		if (!isSignatureValid(payload, signature)) {
+//            logger.warn("Invalid webhook signature for delivery: {}", deliveryId);
+//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid signature");
+//        }
 
         try {
             JsonNode eventPayload = objectMapper.readTree(payload);
