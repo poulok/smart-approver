@@ -72,11 +72,17 @@ public class GitHubService {
         }
     }
 
-    public void dismissReview(GHPullRequest pullRequest, GHPullRequestReview review, String message) throws IOException {
+    public void dismissReview(GHPullRequest pullRequest, GHPullRequestReview reviewToDismiss, String message)
+            throws IOException {
         logger.info("Dismissing review #{} by {} on PR #{}",
-                review.getId(), review.getUser().getLogin(), pullRequest.getNumber());
+                reviewToDismiss.getId(), reviewToDismiss.getUser().getLogin(), pullRequest.getNumber());
 
-        pullRequest.dismissReview(review.getId(), message);
+        for (final GHPullRequestReview review : pullRequest.listReviews()) {
+            if (review.getId() == reviewToDismiss.getId()) {
+                reviewToDismiss.dismiss(message);
+                break;
+            }
+        }
     }
 
     public void addPullRequestComment(GHPullRequest pullRequest, String comment) throws IOException {
