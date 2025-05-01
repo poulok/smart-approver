@@ -8,6 +8,7 @@ import org.hiero.smartapprover.service.CodeOwnerService;
 import org.apache.commons.codec.digest.HmacUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
@@ -44,8 +45,8 @@ public class WebhookController {
 
     @PostMapping("/events")
     public ResponseEntity<String> handleWebhook(
-			@RequestBody RequestEntity<String> requestEntity) {
-		var headers = requestEntity.getHeaders();
+			@RequestHeader HttpHeaders headers,
+			@RequestBody String payload) {
 		String eventType = headers.getFirst("X-GitHub-Event");
 		String signature = headers.getFirst("X-Hub-Signature-256");
 		String deliveryId = headers.getFirst("X-GitHub-Delivery");
@@ -53,7 +54,6 @@ public class WebhookController {
         logger.info("Received webhook: {} - {}", eventType, deliveryId);
 
         // Verify webhook signature
-		String payload = requestEntity.getBody();
 		if (!isSignatureValid(payload, signature)) {
             logger.warn("Invalid webhook signature for delivery: {}", deliveryId);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid signature");
