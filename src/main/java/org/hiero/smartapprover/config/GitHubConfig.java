@@ -2,6 +2,10 @@ package org.hiero.smartapprover.config;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
+
+import org.bouncycastle.asn1.ASN1Integer;
+import org.bouncycastle.asn1.ASN1Primitive;
+import org.bouncycastle.asn1.ASN1Sequence;
 import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GitHubBuilder;
 import org.springframework.context.annotation.Bean;
@@ -10,14 +14,14 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.io.StringReader;
+import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.interfaces.RSAPrivateKey;
-import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.RSAPrivateKeySpec;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.Date;
+import org.bouncycastle.util.io.pem.PemReader;
 
 /**
  * Configuration for GitHub API client
@@ -41,22 +45,24 @@ public class GitHubConfig {
     private RSAPrivateKey loadPrivateKey() throws Exception {
 		ClassPathResource resource = new ClassPathResource(properties.getPrivateKeyPath());
 		byte[] content = resource.getInputStream().readAllBytes();
-        String privateKeyContent = new String(content);
+		String privateKeyContent = new String(content);
 
-        // Strip out header, footer, and any whitespace
-        String privateKeyPEM = privateKeyContent
-                .replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
-                .replaceAll("\\s", "");
+		try (PemReader pemReader = new PemReader(new StringReader(privateKeyContent))) {
+			byte[] keyBytes = pemReader.readPemObject().getContent();
 
-        // Decode the key
-        byte[] encoded = Base64.getDecoder().decode(privateKeyPEM);
+			// Extract modulus and private exponent (PKCS#1 structure)
+			ASN1Primitive asn1Primitive = ASN1Primitive.fromByteArray(keyBytes);
+			ASN1Sequence asn1Sequence = (ASN1Sequence) asn1Primitive;
+			byte[] modulusBytes = ((ASN1Integer) asn1Sequence.getObjectAt(1)).getEncoded();
+			BigInteger modulus = new BigInteger(1, modulusBytes);
+			byte[] privateExponentBytes = ((ASN1Integer) asn1Sequence.getObjectAt(2)).getEncoded();
+			BigInteger privateExponent = new BigInteger(1, privateExponentBytes);
 
-        // Create the key
-        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(encoded);
-        return (RSAPrivateKey) keyFactory.generatePrivate(keySpec);
-    }
+			RSAPrivateKeySpec keySpec = new RSAPrivateKeySpec(modulus, privateExponent);
+			KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+			return (RSAPrivateKey) keyFactory.generatePrivate(keySpec);
+		}
+	}
 
     @Bean
     public String generateJWT() throws Exception {
