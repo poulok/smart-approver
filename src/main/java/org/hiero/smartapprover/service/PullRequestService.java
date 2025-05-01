@@ -129,7 +129,7 @@ public class PullRequestService {
     /**
      * Get all changed files in a pull request
      */
-    private Set<String> getChangedFiles(GHPullRequest pullRequest) throws IOException {
+    private Set<String> getChangedFiles(GHPullRequest pullRequest) {
         Set<String> changedFiles = new HashSet<>();
 
         for (GHPullRequestFileDetail file : pullRequest.listFiles()) {
