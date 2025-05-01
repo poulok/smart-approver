@@ -1,1 +1,1 @@
-web: java -jar target/smart-approver-1.0.0.jar
+web: java -jar smart-approval-bot-1.0.0.jar
