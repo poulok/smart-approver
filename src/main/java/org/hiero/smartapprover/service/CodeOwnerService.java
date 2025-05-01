@@ -140,7 +140,7 @@ public class CodeOwnerService {
         Collections.reverse(reversedRules);
 
         for (CodeOwnerRule rule : reversedRules) {
-            String pattern = rule.getPattern();
+            String pattern = rule.pattern();
 
             // Convert GitHub's pattern to Ant-style pattern
             String antPattern = pattern
@@ -150,12 +150,12 @@ public class CodeOwnerService {
             // Handle file extension patterns
             if (pattern.startsWith("*.")) {
                 if (filePath.endsWith(pattern.substring(1))) {
-                    return new HashSet<>(rule.getOwners());
+                    return new HashSet<>(rule.owners());
                 }
             }
             // Handle directory-specific patterns
             else if (pathMatcher.isMatch(antPattern, filePath)) {
-                return new HashSet<>(rule.getOwners());
+                return new HashSet<>(rule.owners());
             }
         }
 

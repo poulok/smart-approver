@@ -84,8 +84,8 @@ public class GitHubService {
         pullRequest.comment(comment);
     }
 
-    public GHAppInstallation getAppInstallationForRepo(GHRepository repository) throws IOException {
-        GHAppInstallationToken token = repository.getApp().getInstallationToken();
-        return repository.getApp().getInstallationById(token.getId());
-    }
+//    public GHAppInstallation getAppInstallationForRepo(GHRepository repository) throws IOException {
+//        GHAppInstallationToken token = repository.getApp().getInstallationToken();
+//        return repository.getApp().getInstallationById(token.getId());
+//    }
 }

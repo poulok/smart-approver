@@ -43,7 +43,7 @@ public class PullRequestService {
 
         // Check if the feature is enabled for this repository
         RepoConfig config = gitHubService.getRepositoryConfig(repository);
-        if (!config.isEnabled()) {
+        if (!config.enabled()) {
             logger.info("Smart approval bot is disabled for repository {}", repoFullName);
             return;
         }
@@ -101,12 +101,12 @@ public class PullRequestService {
             processReviews(pullRequest, affectedOwners, filesChangedSinceLastProcess);
 
             // Auto-assign reviewers if configured
-            if (config.isAutoAssignReviewers()) {
+            if (config.autoAssignReviewers()) {
                 assignReviewers(pullRequest, affectedOwners);
             }
 
             // Notify relevant code owners if configured
-            if (config.isNotifyCodeOwners()) {
+            if (config.notifyCodeOwners()) {
                 notifyCodeOwners(pullRequest, affectedOwners, fileOwners);
             }
 
@@ -266,14 +266,21 @@ public class PullRequestService {
     private void assignReviewers(GHPullRequest pullRequest, Set<String> affectedOwners) throws IOException {
         // Filter out the PR author from the reviewer list
         String authorLogin = pullRequest.getUser().getLogin();
-        Set<String> reviewers = affectedOwners.stream()
+        Set<GHUser> reviewers = affectedOwners.stream()
                 .map(owner -> owner.startsWith("@") ? owner.substring(1) : owner)
                 .filter(owner -> !owner.equals(authorLogin))
+                .map(MyUser::new)
                 .collect(Collectors.toSet());
 
         if (!reviewers.isEmpty()) {
             logger.info("Assigning reviewers to PR #{}: {}", pullRequest.getNumber(), reviewers);
             pullRequest.requestReviewers(new ArrayList<>(reviewers));
+        }
+    }
+
+    private static class MyUser extends GHUser {
+        private MyUser(String login) {
+            this.login = login;
         }
     }
 
