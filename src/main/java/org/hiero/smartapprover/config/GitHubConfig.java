@@ -20,7 +20,6 @@ import java.security.Security;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.Date;
 
 /**
@@ -83,10 +82,17 @@ public class GitHubConfig {
                 .sign(algorithm);
     }
 
-    @Bean
-    public GitHub gitHubClient(String jwt) throws IOException {
+    @Bean(name = "authAppClient")
+    public GitHub authAppClient(String jwt) throws IOException {
         return new GitHubBuilder()
                 .withJwtToken(jwt)
                 .build();
     }
+
+	@Bean(name = "repoAppClient")
+	public GitHub repoAppClient(GitHub authAppClient) throws IOException {
+		var installationToken = authAppClient.getApp().getInstallationByRepository("mhess-swl",
+				"the-victim").createToken().create();
+		return new GitHubBuilder().withAppInstallationToken(installationToken.getToken()).build();
+	}
 }

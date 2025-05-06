@@ -5,6 +5,7 @@ import org.hiero.smartapprover.model.RepoConfig;
 import org.kohsuke.github.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -19,16 +20,18 @@ public class GitHubService {
     private static final Logger logger = LoggerFactory.getLogger(GitHubService.class);
     private static final String CONFIG_PATH = ".github/smart-approval.json";
 
-    private final GitHub gitHubClient;
+    private final GitHub authAppClient;
+	private GitHub repoAppClient;
     private final ObjectMapper objectMapper;
 
-    public GitHubService(GitHub gitHubClient, ObjectMapper objectMapper) {
-        this.gitHubClient = gitHubClient;
+    public GitHubService( GitHub authAppClient, GitHub repoAppClient, ObjectMapper objectMapper) {
+        this.authAppClient = authAppClient;
+		this.repoAppClient = repoAppClient;
         this.objectMapper = objectMapper;
     }
 
     public GHRepository getRepository(String repoFullName) throws IOException {
-        return gitHubClient.getRepository(repoFullName);
+        return repoAppClient.getRepository(repoFullName);
     }
 
     public GHPullRequest getPullRequest(String repoFullName, int prNumber) throws IOException {

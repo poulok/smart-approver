@@ -30,21 +30,20 @@ public class WebhookController {
     private final CodeOwnerService codeOwnerService;
     private final String webhookSecret;
 	// TODO: temporary injection
-	private final GitHub gitHubClient;
+//	private final GitHub gitHubClient;
 
 	public WebhookController(
             ObjectMapper objectMapper,
             PullRequestService pullRequestService,
             PullRequestStateService pullRequestStateService,
             CodeOwnerService codeOwnerService,
-            String webhookSecret,
-			GitHub gitHubClient) {
+            String webhookSecret) {
         this.objectMapper = objectMapper;
         this.pullRequestService = pullRequestService;
         this.pullRequestStateService = pullRequestStateService;
         this.codeOwnerService = codeOwnerService;
         this.webhookSecret = webhookSecret;
-		this.gitHubClient = gitHubClient;
+//		this.gitHubClient = gitHubClient;
 	}
 
     @PostMapping("/events")
@@ -56,6 +55,7 @@ public class WebhookController {
 		String deliveryId = headers.getFirst("X-GitHub-Delivery");
 
 		logger.info("Headers: {}", headers);
+		logger.info("Signature: {}", signature);
 		logger.info("Payload: {}", payload);
 
         logger.info("Received webhook: {} - {}", eventType, deliveryId);
